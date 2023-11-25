@@ -1,6 +1,20 @@
 package owl
 
 import "core:time"
+import "core:mem"
+import "core:log"
+
+@(private)
+g: Global_State
+
+@(private)
+Global_State :: struct {
+	using _: OS_Global_State,
+	palloc:  mem.Allocator,
+	talloc:  mem.Allocator,
+	log:     log.Logger,
+	windows: [dynamic]^Window,
+}
 
 /*
 Errors returned by this library.
@@ -11,6 +25,9 @@ Error :: enum {
 	// Window manager not found. This can happen during library initialization, if
 	// `$WAYLAND_DISPLAY` nor `$DISPLAY` environment variable isn't set.
 	No_Window_Manager,
+	// A bug in the library implementation, underlying OS or the allocator that has been
+	// passed to the library is too small to handle all the data we're allocating.
+	Out_Of_Memory,
 }
 
 /*
@@ -86,6 +103,30 @@ init :: proc(
 	loc        := #caller_location
 ) -> Error {
 	context.logger = logger
+	// Set the memory allocators for the library.
+	g.palloc = perm_alloc
+	g.talloc = temp_alloc
+	perm_alloc_features : mem.Allocator_Mode_Set = mem.query_features(perm_alloc)
+	if .Free not_in perm_alloc_features {
+		panic("The provided permanent allocator does not implement .Free mode", loc)
+	}
+	if .Resize not_in perm_alloc_features {
+		panic("The provided permanent allocator does not implement .Resize mode", loc)
+	}
+	// Initialize the logger.
+	if .Logger in hints {
+		g.log = logger
+	} else {
+		g.log = log.nil_logger()
+	}
+	// Initialize the windows dynamic array
+	allocation_err: mem.Allocator_Error
+	g.windows, allocation_err = make_dynamic_array([dynamic]^Window, g.palloc)
+	if allocation_err != nil {
+		assert(allocation_err == .Out_Of_Memory, "Something is wrong")
+		log.fatalf("Failed to allocate the array for windows: %v", allocation_err)
+		return .Out_Of_Memory
+	}
 	return os_init(hints, logger, perm_alloc, temp_alloc, loc)
 }
 
@@ -110,6 +151,12 @@ It is possible to initialize and terminate the library multiple times.
 This function is not thread safe.
 */
 terminate :: proc() {
+	context.logger = g.log
+	for window in g.windows {
+		os_window_destroy(window)
+		free(window)
+	}
+	delete(g.windows)
 	os_terminate()
 }
 
@@ -280,12 +327,18 @@ This procedure is not thread-safe as long as allocation procedures of the specif
 allocator are not synchronized.
 */
 window_create :: proc(hints: ^Window_Hints) -> ^Window {
+	context.logger = g.log
+	window: ^Window
 	if hints == nil {
 		default_hints := hints_default()
-		return os_window_create(&default_hints)
+		window = os_window_create(&default_hints)
 	} else {
-		return os_window_create(hints)
+		window = os_window_create(hints)
 	}
+	if window != nil {
+		append(&g.windows, window)
+	}
+	return window
 }
 
 /*
@@ -340,7 +393,18 @@ loop. If one of the events in the queue destroyed the window, receiving the next
 event queue will dereference a null-pointer.
 */
 window_destroy :: proc(window: ^Window) {
+	context.logger = g.log
 	os_window_destroy(window)
+	free(window)
+	window_index := -1
+	for our_window, index in g.windows {
+		if window == our_window {
+			window_index = index
+			break
+		}
+	}
+	assert(window_index >= 0, "Destroying non-existent window")
+	unordered_remove(&g.windows, window_index)
 }
 
 /*
@@ -364,6 +428,7 @@ In case duration is not indefinite, it must be a positive value.
 `true` if the event was delivered, `false` if the event wasn't delivered or/and timeout expired.
 */
 wait_event :: proc(timeout := DURATION_INDEFINITE) -> b32 {
+	context.logger = g.log
 	return os_wait_event(timeout)
 }
 
@@ -377,5 +442,6 @@ this procedure returns `false`, otherwise it handles the events present and retu
 `wait_event` this function does not block if there are no events in the queue.
 */
 poll_events :: proc() -> bool {
+	context.logger = g.log
 	return os_poll_events()
 }
