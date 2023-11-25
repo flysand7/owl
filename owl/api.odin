@@ -250,40 +250,31 @@ hint_size :: proc(hints: ^Window_Hints, size_x: int, size_y: int) {
 
 /*
 Callback to track window position changes.
-
-## Description
-
-This callback is called when a window has been moved by the user or otherwise.
-
-The parameters `position_x` and `position_y` specify the new position of the window, in screen
-coordinates.
-
-## Re-entrancy
-
-Do not call procedures that change window position from within the callback.
-
-## Thread-safety
-
-Do not call procedures that destroy window from within the callback.
 */
 Window_Callback_Position :: #type proc(window: ^Window, position_x: int, position_y: int)
 
 /*
 Callback to track window size changes.
-
-## Description
-
-This callback is called when a window has been changed.
-
-## Re-entrancy
-
-Do not call procedures that change window size from within the callback.
-
-## Thread-safety
-
-Do not call procedures that destroy the window from within the callback.
 */
 Window_Callback_Size :: #type proc(window: ^Window, size_x: int, size_y: int)
+
+/*
+Mouse movement callback. `position_x` and `position_y` specify the mouse position, in window
+coordinates.
+*/
+Window_Callback_Mouse :: #type proc(window: ^Window, position_x: int, position_y: int)
+
+/*
+Window hovering callback. `entered` is true, if the cursor has just entered the window, and `false`
+if the cursor has just left the window's bounds.
+*/
+Window_Callback_Crossing :: #type proc(window: ^Window, entered: bool)
+
+/*
+Window focus callback. `focused` is true, if the window became enfocused, `false` if it went out
+of focus.
+*/
+Window_Callback_Focus :: #type proc(window: ^Window, focused: bool)
 
 /*
 Semi-opaque structure representing a window.
@@ -297,6 +288,9 @@ Window :: struct {
 	should_close: bool,
 	cb_position:  Window_Callback_Position,
 	cb_size:      Window_Callback_Size,
+	cb_mouse:     Window_Callback_Mouse,
+	cb_crossing:  Window_Callback_Crossing,
+	cb_focus:     Window_Callback_Focus,
 }
 
 /*
@@ -374,6 +368,42 @@ This procedure sets the callback that will be called when window size is changed
 */
 window_size_callback :: proc(window: ^Window, callback: Window_Callback_Size) {
 	window.cb_size = callback
+}
+
+/*
+Set the window hover callback.
+
+## Description
+
+This procedure sets the window crossing callback that is called when the mouse enters or leaves
+the bounds of the specified window.
+*/
+window_hover_callback :: proc(window: ^Window, callback: Window_Callback_Crossing) {
+	window.cb_crossing = callback
+}
+
+/*
+Set the window mouse movement callback.
+
+## Description
+
+This procedure sets the window mouse movement callback that is called when the mouse moves within
+the bounds of the specified window.
+*/
+window_mouse_callback :: proc(window: ^Window, callback: Window_Callback_Mouse) {
+	window.cb_mouse = callback
+}
+
+/*
+Set the window focus callback.
+
+## Description
+
+This procedure sets the window focus callback. It is called when the windows enters or leaves the
+focus.
+*/
+window_focus_callback :: proc(window: ^Window, callback: Window_Callback_Focus) {
+	window.cb_focus = callback
 }
 
 /*

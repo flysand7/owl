@@ -197,7 +197,6 @@ x11_window_create :: proc(hints: ^Window_Hints) -> ^Window {
 
 x11_window_destroy :: proc(window: ^Window) {
 	g.x11.XDestroyWindow(g.x11.display, window.x11.handle)
-	free(window)
 }
 
 x11_wait_event :: proc(timeout := DURATION_INDEFINITE) -> b32 {
@@ -237,9 +236,12 @@ x11_handle_event :: proc(event: ^xlib.XEvent) {
 	// Handle the event.
 	#partial switch event.type {
 		case .Expose:
-		case .EnterNotify:
-		case .LeaveNotify:
 		case .DestroyNotify:
+		case .EnterNotify, .LeaveNotify:
+			entered := (event.xcrossing.type == .EnterNotify)
+			if window.cb_crossing != nil {
+				window.cb_crossing(window, entered)
+			}
 		case .ConfigureNotify:
 			new_pos_x := cast(int) event.xconfigure.x
 			new_pos_y := cast(int) event.xconfigure.y
@@ -260,11 +262,19 @@ x11_handle_event :: proc(event: ^xlib.XEvent) {
 				}
 			}
 		case .MotionNotify:
+			pos_x := cast(int) event.xmotion.x
+			pos_y := cast(int) event.xmotion.y
+			if window.cb_mouse != nil {
+				window.cb_mouse(window, pos_x, pos_y)
+			}
 		case .PropertyNotify:
 		case .GravityNotify:
 		case .MapNotify:
-		case .FocusIn:
-		case .FocusOut:
+		case .FocusIn, .FocusOut:
+			focused := (event.xfocus.type == .FocusIn)
+			if window.cb_focus != nil {
+				window.cb_focus(window, focused)
+			}
 		case .ClientMessage:
 			if cast(xlib.Atom) event.xclient.data.l[0] == g.x11.wm_delete {
 				window.should_close = true
