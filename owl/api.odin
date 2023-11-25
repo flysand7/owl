@@ -110,3 +110,153 @@ This function is not thread safe.
 terminate :: proc() {
 	os_terminate()
 }
+
+/*
+Value for some parameters specifying that the library should pick a value. The places where this
+value is allowed are explicitly documented.
+*/
+DONT_CARE := min(int)
+
+/*
+Hints for window initialization.
+*/
+Window_Hints :: struct {
+	title: string,
+	position_x: int,
+	position_y: int,
+	size_x: int,
+	size_y: int,
+}
+
+/*
+Return a default set of hints.
+
+## Description
+
+This procedure returns the set of default window hints. The values are as follows:
+- `title`: `"OWL Window"`
+- `position_x`: `DONT_CARE`
+- `position_y`: `DONT_CARE`
+- `size_x`: `DONT_CARE`
+- `size_y`: `DONT_CARE`
+*/
+hints_default :: proc() -> Window_Hints {
+	return {
+		title = "OWL Window",
+		position_x = DONT_CARE,
+		position_y = DONT_CARE,
+		size_x = DONT_CARE,
+		size_y = DONT_CARE,
+	}
+}
+
+/*
+Specify that you want a specific title on your window.
+
+## Lifetimes
+
+The provided string must be alive during the time between specifying this hint is specified and the
+call to `create_window()`. The library borrows the string for that period. During the call to
+`create_window()`, this string may be transformed to a cstring using the temporary allocator.
+*/
+hint_title :: proc(hints: ^Window_Hints, title: string) {
+	hints.title = title
+}
+
+/*
+Specify that you want a window at a specific position.
+
+## Description
+
+This procedure sets the desired position of the window, in screen coordinates, or, if `DONT_CARE`
+is specified for either coordinate, the window is displayed such that it is centered. The default
+value of this hint is `DONT_CARE`.
+
+In case a coordinate is specified, the position values must be non-negative.
+*/
+hint_position :: proc(hints: ^Window_Hints, position_x: int, position_y: int) {
+	hints.position_x = position_x
+	hints.position_y = position_y
+}
+
+/*
+Specify that a window needs to have a specific size.
+
+## Description
+
+This procedure sets the desired size of the window, in screen coordinates, or, if `DONT_CARE` is
+specified for either coordinate, the window's size is chosen to be 1280x720.
+
+## Remark (tiled window managers)
+
+In case a tiled window manager is used (typically on linux), the window size can not be controlled
+by the user and instead is decided by the window manager. Do not assume that the size of the window
+is the same as you asked it to be with this hint, always verify the size after the window has been
+created.
+*/
+hint_size :: proc(hints: ^Window_Hints, size_x: int, size_y: int) {
+	hints.size_x = size_x
+	hints.size_y = size_y
+}
+
+/*
+Semi-opaque structure representing a window.
+*/
+Window :: struct {
+	using _: OS_Window,
+	size_x: int,
+	size_y: int,
+	position_x: int,
+	position_y: int,
+}
+
+/*
+Create the window.
+
+## Params
+- `hints`: The set of hints to provide for window initialization, or `nil` to use the default.
+
+## Description
+
+This function creates the window and returns a semi-opaque pointer to the `window` structure.
+Look at documentation for the hint-initialization function to know which options are available.
+
+Here's a short example of how you can use this function to create a window.
+
+```
+hints := owl.hints_default()
+owl.hint_position(&hints, 0, 0)
+owl.hint_size(&hints, 1280, 720)
+owl.hint_title(&hints, "My cool-ass title")
+window := create_window(&hints)
+assert(window != nil, "Window creation failed")
+```
+
+## Thread-safety
+
+This procedure is not thread-safe as long as allocation procedures of the specified permanent
+allocator are not synchronized.
+*/
+window_create :: proc(hints: ^Window_Hints) -> ^Window {
+	if hints == nil {
+		default_hints := hints_default()
+		return os_window_create(&default_hints)
+	} else {
+		return os_window_create(hints)
+	}
+}
+
+
+/*
+Destroy a window.
+
+## Description
+
+This procedure closes the window and deallocates the associated memory. You can call this function
+when the window is open or closed, and the window is guaranteed to be destroyed.
+
+You can not call any procedures using the destroyed window as a parameter.
+*/
+window_destroy :: proc(window: ^Window) {
+	os_window_destroy(window)
+}

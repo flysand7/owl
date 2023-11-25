@@ -11,6 +11,11 @@ import "vendor:x11/xlib"
 // Read-only global state. Initialized once during the library initialization.
 g: Global_State
 
+OS_Window :: struct {
+	x11: X11_Window,
+	wl:  Wayland_Window,
+}
+
 Global_State :: struct {
 	wm:     Window_Manager,
 	palloc: mem.Allocator,
@@ -69,4 +74,23 @@ os_terminate :: proc() {
 	} else if g.wm == .X11 {
 		x11_terminate()
 	}
+	panic("No window manager")
+}
+
+os_window_create :: proc(hints: ^Window_Hints) -> ^Window {
+	if g.wm == .Wayland {
+		return wl_window_create(hints)
+	} else if g.wm == .X11 {
+		return x11_window_create(hints)
+	}
+	panic("No window manager")
+}
+
+os_window_destroy :: proc(window: ^Window) {
+	if g.wm == .Wayland {
+		wl_window_destroy(window)
+	} else if g.wm == .X11 {
+		x11_window_destroy(window)
+	}
+	panic("No window manager")
 }

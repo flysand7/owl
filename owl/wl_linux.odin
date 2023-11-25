@@ -8,6 +8,10 @@ Wayland_State :: struct {
 	display: i32,
 }
 
+Wayland_Window :: struct {
+	
+}
+
 wl_try_init :: proc() -> bool {
 	display, found := os.lookup_env("WAYLAND_DISPLAY", g.talloc)
 	if !found {
@@ -20,4 +24,12 @@ wl_try_init :: proc() -> bool {
 
 wl_terminate :: proc() {
 	
+}
+
+wl_window_create :: proc(hints: ^Window_Hints) -> ^Window {
+	return nil
+}
+
+wl_window_destroy :: proc(window: ^Window) {
+	free(window)
 }
