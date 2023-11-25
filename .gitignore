@@ -1,3 +1,10 @@
 
-# Odin language server
+# Editor-specific
 /ols.json
+/.vscode
+
+# Test files
+**/test*.odin
+
+# Output binary files
+*.bin
