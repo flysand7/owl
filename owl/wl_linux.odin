@@ -33,3 +33,11 @@ wl_window_create :: proc(hints: ^Window_Hints) -> ^Window {
 wl_window_destroy :: proc(window: ^Window) {
 	free(window)
 }
+
+wl_wait_event :: proc(timeout := DURATION_INDEFINITE) -> b32 {
+	return false
+}
+
+wl_poll_events :: proc() -> bool {
+	return false
+}

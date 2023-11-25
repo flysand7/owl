@@ -17,12 +17,13 @@ OS_Window :: struct {
 }
 
 Global_State :: struct {
-	wm:     Window_Manager,
-	palloc: mem.Allocator,
-	talloc: mem.Allocator,
-	log:    log.Logger,
-	x11:    X11_State,
-	wl:     Wayland_State,
+	wm:      Window_Manager,
+	palloc:  mem.Allocator,
+	talloc:  mem.Allocator,
+	log:     log.Logger,
+	x11:     X11_State,
+	wl:      Wayland_State,
+	windows: [dynamic]^Window,
 }
 
 Window_Manager :: enum {
@@ -65,32 +66,89 @@ os_init :: proc(
 		return .No_Window_Manager
 	}
 	g.wm = window_manager
+	// Initialize the windows dynamic array
+	allocation_err: mem.Allocator_Error
+	g.windows, allocation_err = make_dynamic_array([dynamic]^Window, g.palloc)
+	if allocation_err != nil {
+		log.fatalf("Failed to allocate the array for windows: %v", allocation_err)
+		return nil
+	}
 	return nil
 }
 
 os_terminate :: proc() {
+	context.logger = g.log
 	if g.wm == .Wayland {
+		for window in g.windows {
+			wl_window_destroy(window)
+			free(window)
+		}
+		delete(g.windows)
 		wl_terminate()
 	} else if g.wm == .X11 {
+		for window in g.windows {
+			x11_window_destroy(window)
+			free(window)
+		}
+		delete(g.windows)
 		x11_terminate()
+	} else {
+		panic("No window manager")
 	}
-	panic("No window manager")
 }
 
 os_window_create :: proc(hints: ^Window_Hints) -> ^Window {
+	context.logger = g.log
+	window: ^Window = nil
 	if g.wm == .Wayland {
-		return wl_window_create(hints)
+		window = wl_window_create(hints)
 	} else if g.wm == .X11 {
-		return x11_window_create(hints)
+		window = x11_window_create(hints)
+	} else {
+		panic("No window manager")
 	}
-	panic("No window manager")
+	if window != nil {
+		append(&g.windows, window)
+	}
+	return window
 }
 
 os_window_destroy :: proc(window: ^Window) {
+	context.logger = g.log
 	if g.wm == .Wayland {
 		wl_window_destroy(window)
 	} else if g.wm == .X11 {
 		x11_window_destroy(window)
+	} else {
+		panic("No window manager")
+	}
+	window_index := -1
+	for our_window, index in g.windows {
+		if window == our_window {
+			window_index = index
+			break
+		}
+	}
+	assert(window_index >= 0, "Destroying non-existent window")
+	unordered_remove(&g.windows, window_index)
+}
+
+os_wait_event :: proc(timeout := DURATION_INDEFINITE) -> b32 {
+	context.logger = g.log
+	if g.wm == .Wayland {
+		return wl_wait_event(timeout)
+	} else if g.wm == .X11 {
+		return x11_wait_event(timeout)
 	}
 	panic("No window manager")
+}
+
+os_poll_events :: proc() -> bool {
+	context.logger = g.log
+	if g.wm == .Wayland {
+		return wl_poll_events()
+	} else if g.wm == .X11 {
+		return x11_poll_events()
+	}
+	panic("No window manager")	
 }

@@ -1,5 +1,7 @@
 package owl
 
+import "core:time"
+
 /*
 Errors returned by this library.
 */
@@ -200,14 +202,54 @@ hint_size :: proc(hints: ^Window_Hints, size_x: int, size_y: int) {
 }
 
 /*
+Callback to track window position changes.
+
+## Description
+
+This callback is called when a window has been moved by the user or otherwise.
+
+The parameters `position_x` and `position_y` specify the new position of the window, in screen
+coordinates.
+
+## Re-entrancy
+
+Do not call procedures that change window position from within the callback.
+
+## Thread-safety
+
+Do not call procedures that destroy window from within the callback.
+*/
+Window_Callback_Position :: #type proc(window: ^Window, position_x: int, position_y: int)
+
+/*
+Callback to track window size changes.
+
+## Description
+
+This callback is called when a window has been changed.
+
+## Re-entrancy
+
+Do not call procedures that change window size from within the callback.
+
+## Thread-safety
+
+Do not call procedures that destroy the window from within the callback.
+*/
+Window_Callback_Size :: #type proc(window: ^Window, size_x: int, size_y: int)
+
+/*
 Semi-opaque structure representing a window.
 */
 Window :: struct {
-	using _: OS_Window,
-	size_x: int,
-	size_y: int,
-	position_x: int,
-	position_y: int,
+	using _:      OS_Window,
+	size_x:       int,
+	size_y:       int,
+	position_x:   int,
+	position_y:   int,
+	should_close: bool,
+	cb_position:  Window_Callback_Position,
+	cb_size:      Window_Callback_Size,
 }
 
 /*
@@ -246,6 +288,40 @@ window_create :: proc(hints: ^Window_Hints) -> ^Window {
 	}
 }
 
+/*
+Check whether window should close.
+
+## Description
+
+When the user presses the 'X' button in the titlebar or makes a request for the window to close
+otherwise, the library sets `should_close` flag to `true`. You can check whether this flag is set
+in the event loop to only loop until this window is closed.
+*/
+window_should_close :: proc(window: ^Window) -> bool {
+	return window.should_close
+}
+
+/*
+Set the window position callback.
+
+## Description
+
+This procedure sets the callback that will be called when window position is changed.
+*/
+window_position_callback :: proc(window: ^Window, callback: Window_Callback_Position) {
+	window.cb_position = callback
+}
+
+/*
+Set the window size callback.
+
+## Description
+
+This procedure sets the callback that will be called when window size is changed.
+*/
+window_size_callback :: proc(window: ^Window, callback: Window_Callback_Size) {
+	window.cb_size = callback
+}
 
 /*
 Destroy a window.
@@ -256,7 +332,50 @@ This procedure closes the window and deallocates the associated memory. You can 
 when the window is open or closed, and the window is guaranteed to be destroyed.
 
 You can not call any procedures using the destroyed window as a parameter.
+
+## Lifetimes
+
+Do not call this procedures from within any callbacks. Most likely you are handling events in a
+loop. If one of the events in the queue destroyed the window, receiving the next event from the
+event queue will dereference a null-pointer.
 */
 window_destroy :: proc(window: ^Window) {
 	os_window_destroy(window)
+}
+
+/*
+When duration is expected as a timeout for waiting, this value signifies that waiting is
+indefinite.
+*/
+DURATION_INDEFINITE :: time.MIN_DURATION
+
+/*
+Blocks the calling thread until an event has been delivered, or the timeout expires
+
+## Description
+
+This procedure blocks the calling thread until the next event has been delivered via callbacks. If
+the duration is specified as `DURATION_INDEFINITE`, the waiting is indefinite and does not time out.
+
+In case duration is not indefinite, it must be a positive value.
+
+## Returns
+
+`true` if the event was delivered, `false` if the event wasn't delivered or/and timeout expired.
+*/
+wait_event :: proc(timeout := DURATION_INDEFINITE) -> b32 {
+	return os_wait_event(timeout)
+}
+
+/*
+Checks if there are any events in the queue, and handles them only if there are any.
+
+## Description
+
+This procedure checks to see if there are any events in the event queue. If there are no events,
+this procedure returns `false`, otherwise it handles the events present and returns `true`. Unlike
+`wait_event` this function does not block if there are no events in the queue.
+*/
+poll_events :: proc() -> bool {
+	return os_poll_events()
 }
